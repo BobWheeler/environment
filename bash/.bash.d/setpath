@@ -1,0 +1,142 @@
+# -*- mode: Shell-script; -*-
+
+function __setpath_usage () {
+    if [ $# -ne 0 ]; then
+	echo "$1" 1>&2
+    fi
+    echo "usage: setpath [-p pathvar ] [-b | -a | -d ] dir [dir ... ]"  1>&2
+    return 2
+}
+
+function __setpath_dedup () {
+    declare -A remove
+    local result=()
+    local e
+
+    IFS=":"
+    for e in $1; do
+	if ! ${remove["$e"]:-false}; then
+	    result+=("$e")
+	    remove["$e"]=true
+	fi
+    done
+
+    IFS=":"
+    echo "${result[*]}"
+    return 0
+}
+
+function __setpath_remove () {
+    declare -A remove
+    local result=()
+    local e
+
+    IFS=":"
+    for e in $2; do
+	remove["$e"]=true
+    done
+
+    for e in $1; do
+	if ! ${remove["$e"]:-false}; then
+	    result+=("$e")
+	fi
+    done
+
+    IFS=":"
+    echo "${result[*]}"
+    return 0
+}
+
+function setpath () {
+    # trap 'echo  "     $BASH_COMMAND";' DEBUG
+    if [ $# -eq 0 ]; then
+	return $(__setpath_usage)
+    fi
+
+    local op
+    local path_name
+
+    while [ $# -gt 0 ]; do
+	case $1 in
+	    -a | -b | -d)
+		if [ -n "$op" ]; then
+		    return $(__setpath_usage "only one of -a, -b or -d may be used")
+		fi
+		op=$1
+		;;
+	    -p)
+		if [ $# -eq 0 -o -n "$path_name" ]; then
+		   return $(__setpath_usage "-p can only be used once and must specify a path to change")
+		fi
+		path_name=$2
+		shift
+		;;
+	    -?*)
+		return $(__setpath_usage "unknown option $1")
+		;;
+	    *)
+		break;
+	esac
+	shift
+    done
+
+    if [ -z "$op" ]; then
+	op="-a"
+    fi
+
+    if [ -z "$path_name" ]; then
+	path_name="XPATH"
+    fi
+
+    local path_args
+
+    IFS=":"
+    path_args=$(__setpath_dedup "$*")
+
+    local e
+    IFS=":"
+    for dir in $path_args; do
+	if [ ! -d $dir ]; then
+	    return $(__setpath_usage "$dir is not a directory")
+	fi
+    done
+
+    local orig_path
+
+    orig_path=$(__setpath_dedup "${!path_name}")
+    orig_path=$(__setpath_remove "$orig_path" "$path_args")
+
+
+    if [ -n "$orig_path" -a -n "$path_args" ]; then
+	sep=":"
+    else
+	sep=""
+    fi
+
+    local new_path
+
+    case "$op" in
+	-a)
+	    new_path="${orig_path}${sep}${path_args}"
+	    ;;
+	-b)
+	    new_path="${path_args}${sep}${orig_path}"
+	    ;;
+	-d)
+	    new_path="${orig_path}"
+	    ;;
+    esac
+
+    IFS=:
+    canonical="${new_path}"
+    # echo "canonical : $canonical"
+
+    IFS=$'\ \t\n'
+    export ${path_name}="${new_path}"
+
+    return 0
+}
+
+
+__addmodule setpath
+__addfunction setpath "Manipulate path variables"

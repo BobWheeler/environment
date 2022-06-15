@@ -1,0 +1,193 @@
+;; Red Hat Linux default .emacs initialization file  ; -*- mode: emacs-lisp -*-
+
+
+;; Added by Package.el.  This must come before configurations of
+;; installed packages.  Don't delete this line.  If you don't want it,
+;; just comment it out by adding a semicolon to the start of the line.
+;; You may delete these explanatory comments.
+(package-initialize)
+
+(message "---------------- loading .emacs ---------------------")
+
+(setq default-directory "/home/rw052t")
+(add-to-list 'load-path "/home/rw052t/repos/environment/emacs/.emacs.d/lisp")
+
+;; (setq tags-file-name (substitute-in-file-name "$REPODIR/TAGS"))
+
+;; ;; Load gnu id
+;; (autoload 'gid "idutils" "run idutils' gid command" t)
+
+(message "---------------- loading keymaps ---------------------")
+;; Set up the keyboard so the delete key on both the regular keyboard
+;; and the keypad delete the character under the cursor and to the right
+;; under X, instead of the default, backspace behavior.
+(global-set-key [delete] 'delete-char)
+(global-set-key [kp-delete] 'delete-char)
+
+(global-set-key [f1]  'goto-line)
+(global-set-key [f2]  'query-replace)
+(global-set-key [f3]  'compile)
+(global-set-key [f4]  'gdb)
+(global-set-key [f5]  'shell)
+(global-set-key [f6]  'indent-region)
+(global-set-key [f7]  'comment-region)
+(global-set-key [f8]  'uncomment-region)
+(global-set-key [f9]  'query-replace-regexp)
+(global-set-key [f12]  'undo)
+
+(message "---------------- loading look and feel ---------------------")
+
+(setq compile-command "cd $REPOROOT; make -S")
+
+;; (require 'redo)
+;; (require 'mac-key-mode)
+;; (mac-key-mode 1)
+;; (setq inverse-video t)
+
+;; look and feel
+;; (line-number-mode t)
+(column-number-mode t)
+;;(tool-bar-mode t)
+(setq blink-matching-paren t)
+(setq doc-view-continuous t)
+
+;; enable visual feedback on selections
+(setq-default transient-mark-mode t)
+
+;; always end a file with a newline
+(setq require-final-newline t)
+
+;; stop at the end of the file, not just add lines
+(setq next-line-add-newlines nil)
+
+;; Setup save options (auto and backup)
+(setq auto-save-timeout 2000)
+(setq make-backup-files t)
+
+;; Setup time mode
+(autoload 'display-time "time" "Display Time" t)
+(condition-case err
+    (display-time)
+  (error (message "Unable to load Time package.")))
+(setq display-time-24hr-format nil)
+(setq display-time-day-and-date t)
+
+(when window-system
+  ;; enable wheelmouse support by default
+  (mwheel-install)
+  ;; use extended compound-text coding for X clipboard
+  (set-selection-coding-system 'compound-text-with-extensions))
+
+(message "---------------- loading language bindings ---------------------")
+(add-hook 'c-mode-hook (lambda () (setq c-basic-offset 8)))
+(add-hook 'c-mode-hook (lambda () (setq comment-column 50)))
+(add-hook 'c++-mode-hook (lambda () (setq c-basic-offset 8)))
+(add-hook 'c++-mode-hook (lambda () (setq comment-column 50)))
+(add-hook 'asm-mode-hook (lambda () (setq comment-column 115)))
+
+;; Setup C mode
+(autoload 'c++-mode           "cc-mode" "C++ Editing Mode" t)
+(autoload 'c-mode             "cc-mode" "C Editing Mode" t)
+(autoload 'c-mode-common-hook "cc-mode" "C Mode Hooks" t)
+(autoload 'c-add-style        "cc-mode" "Add coding style" t)
+
+;; ;; Setup javascript
+;; (require 'js2-mode)
+;; (add-to-list 'auto-mode-alist '("\\.js\\'" . js2-mode))
+;; (add-hook 'js2-mode-hook (lambda () (ggtags-mode 1)))
+
+
+;; Associate extensions with modes
+(add-to-list 'auto-mode-alist '("\\.h$" . c++-mode))
+
+;; Major mode for editing k/q files
+(autoload 'q-mode "q-mode")
+(add-to-list 'auto-mode-alist '("\\.[kq]\\'" . q-mode))
+(provide 'q-mode)
+
+(autoload 'php-mode "php-mode" "php Editing Mode" t)
+(add-to-list 'auto-mode-alist '("\\.\\(?:php\\|phtml\\)\\'" . php-mode))
+
+(setq load-home-init-file t) ; don't load init file from ~/.xemacs/init.el
+
+
+(message "---------------- Loading custom-set-variables ---------------- ")
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(ansi-color-for-comint-mode t)
+ '(auto-compression-mode t nil (jka-compr))
+ '(c-doc-comment-style
+   (quote
+    ((c++-mode . javadoc)
+     (java-mode . javadoc)
+     (pike-mode . autodoc))))
+ '(case-fold-search t)
+ '(column-number-mode t)
+ '(current-language-environment "UTF-8")
+ '(dabbrev-case-distinction nil)
+ '(dabbrev-case-fold-search t)
+ '(dabbrev-case-replace (quote case-replace))
+ '(default-frame-alist
+    (quote
+     ((foreground-color . "gray60")
+      (background-color . "#000000")
+      (background-mode . dark)
+      (cursor-color . "red3")
+      (tool-bar-lines . 1)
+      (menu-bar-lines . 1))))
+ '(default-input-method "rfc1345")
+ '(display-time-mode t)
+ '(doxymacs-doxygen-style "JavaDoc")
+ '(fill-column 139)
+ '(global-font-lock-mode t nil (font-lock))
+ '(inhibit-startup-screen t)
+ '(js-indent-level 2)
+ '(package-selected-packages (quote (dash js2-mode)))
+ '(q-indent-step 4)
+ '(safe-local-variable-values (quote ((sh-basic-offet . 2) (commenbt-column . 30))))
+ '(scroll-bar-mode nil)
+ '(show-paren-mode t)
+ '(user-mail-address "bob.wheeler@xandr.com"))
+
+
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(default ((t (:inherit nil :stipple nil :background "#000000" :foreground "gray60" :inverse-video nil :box nil :strike-through nil :overline nil :underline nil :slant normal :weight normal :height 180 :width normal :foundry "nil" :family "Courier New"))))
+ '(c-annotation-face ((t (:inherit font-lock-constant-face :foreground "yellow"))))
+ '(cpp-font-lock-literal-face ((((class color)) (:foreground "gray60"))))
+ '(cpp-font-lock-preprocessor-face ((((class color)) (:foreground "light sky blue"))))
+ '(cpp-font-lock-type-name-face ((((class color)) (:foreground "Sienna3"))))
+ '(font-lock-builtin-face ((t (:foreground "light slate blue"))))
+ '(font-lock-comment-delimiter-face ((t (:inherit font-lock-comment-face :foreground "yellow"))))
+ '(font-lock-comment-face ((t (:foreground "yellow"))))
+ '(font-lock-constant-face ((t (:foreground "deep pink"))))
+ '(font-lock-doc-face ((((class color)) (:foreground "red"))))
+ '(font-lock-function-name-face ((t (:foreground "dark orange"))))
+ '(font-lock-keyword-face ((t (:foreground "cyan"))))
+ '(font-lock-negation-char-face ((t nil)))
+ '(font-lock-preprocessor-face ((t (:foreground "light slate blue"))))
+ '(font-lock-reference-face ((((class color)) (:foreground "gray60"))))
+ '(font-lock-string-face ((((class color)) (:foreground "green"))))
+ '(font-lock-type-face ((t (:foreground "dark violet"))))
+ '(font-lock-variable-name-face ((t (:foreground "deep sky blue"))))
+ '(font-lock-warning-face ((t (:foreground "red"))))
+ '(q-font-lock-builtin-face ((t (:foreground "#FF6321"))))
+ '(q-font-lock-constant-face ((t (:foreground "#FFCB25"))))
+ '(q-font-lock-function-name-face ((t (:foreground "magenta"))))
+ '(q-font-lock-keyword-face ((t (:foreground "#84E571"))))
+ '(q-font-lock-math-face ((t (:foreground "blue"))))
+ '(q-font-lock-preprocessor-face ((t (:foreground "#46FD59"))))
+ '(q-font-lock-stupid-face ((t (:background "orange" :foreground "yellow"))))
+ '(q-font-lock-type-face ((t (:foreground "#C2FD9D"))))
+ '(q-font-lock-variable-name-face ((t (:foreground "#3E97F7"))))
+ '(q-font-lock-warning-face ((t (:foreground "red")))))
+
+(message "---------------- .emacs loaded ---------------- ")
+(put 'downcase-region 'disabled nil)

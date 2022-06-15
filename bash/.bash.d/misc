@@ -1,0 +1,79 @@
+# -*- mode: Shell-script; -*-
+
+function lsargs () {
+    if  [ $# -eq 0 ]; then echo "usage: lsargs arg [arg [arg ...]]"; return; fi
+    __n=0
+    while [ $# -ne 0 ] ; do
+	__n=$((__n + 1))
+	echo "\$$__n = $1"
+	shift
+    done
+}
+
+# function dirls () {
+#     if [ $# -gt 1 ]; then echo 'usage: dirls depth'; return 0; fi
+#     Depth="$1"
+#     find . -type d -maxdepth ${Depth:=1}
+# }
+
+function dirls () {
+    if [ $# -gt 2 ]; then echo 'usage: dirls [path] [-depth]'; return 0; fi
+    path="."
+    depth=""
+
+    if [ -n "$1" ] && ! [[ $1 =~ -[0-9]+ ]]; then path="$1"; shift; fi
+    if [ -n "$1" ] && [[ $1 =~ -[0-9]+ ]]; then depth="${1:1}"; shift; fi
+
+    find $path -maxdepth ${depth:=1} -type d 
+}
+
+function fingerprints() {
+    # usage: fingerprints [keyfile]
+    __file="${1:-$HOME/.ssh/authorized_keys}"
+    while read __line; do
+	[[ -n $__line && ${__line###} = $__line ]] && ssh-keygen -l -f /dev/stdin <<< $__line
+    done < "${__file}"
+}
+
+function pretty-print () {
+    options=""
+    __n=0
+    while [ $# -ne 0 ]; do
+        __n=$((__n + 1))
+        echo "\$$__n = $1"
+	if [ ${1:0:1} == '-' ]; then
+	    options+=" $1"
+	else
+	    file="$1"
+	    ext=$(echo $file | sed -nre '/.*\..*/ {s/.*\.([^.]*)$/\1/g; p}')
+	    case $ext in
+		"js")
+		    lang=" -Ejavascript"
+		    ;;
+		"c" | "h")
+		    lang=" -Ec"
+		    ;;
+		"cpp" | "hpp")
+		    lang=" -Ecpp"
+		    ;;
+		"el")
+		    lang=" -Eelisp"
+		    ;;
+		*)
+		    lang=""
+		    ;;
+	    esac
+	    echo "/usr/bin/enscript${options:- -2rG}${lang} -o - $file | /usr/bin/ps2pdf - > ~/outbound/$file.pdf"
+	    /usr/bin/enscript${options:- -2rG}${lang} -o - $file | /usr/bin/ps2pdf - > ~/outbound/$file.pdf
+	    options=""
+	fi
+        shift;
+    done;
+}
+
+__addmodule misc
+__addfunction lsargs "list arguments for script debugging"
+__addfunction dirls "list directories to specified depth"
+__addfunction fingerprints "list ssh host fingerprints in specified file keysfile or ~/.ssh/authorized_keys"
+__addfunction pretty-print "pretty print source files with enscript into pdf files"
+

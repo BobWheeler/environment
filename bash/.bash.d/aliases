@@ -1,0 +1,27 @@
+# -*- mode: Shell-script; -*-
+
+alias clean='rm *~'
+alias ls='ls -F '
+alias hgrep='history | grep'
+alias make="/usr/bin/make -j$(expr $(nproc) - 2)"
+alias grep="/bin/grep --color"
+alias egrep="/bin/egrep --color"
+alias cmake="cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1"
+alias psm='ps -u$USER'
+alias psmg='ps -u$USER | grep'
+alias hl='GREP_COLOR="0;41" grep -A 10000 -B 10000 --color=always'
+alias emacs="emacs -nw"
+alias suemacs="sudo emacs -q -l $HOME/.emacs"
+alias hap="ssh bwheeler@bwheeler-el7vm"
+
+__addmodule aliases
+__addfunction clean "clean emacs backup files"
+__addfunction ls 'ls -F ' "ls with -F"
+__addfunction hgrep 'history | grep' "grep history"
+__addfunction make "/usr/bin/make -j$(nproc)" "make using all cores"
+__addfunction grep "/bin/grep --color" "grep with color"
+__addfunction egrep "/bin/egrep --color" "egrep with color"
+__addfunction cmake "cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1" "cmake and generate compile arguments"
+__addfunction psm 'ps -u$LOGNAME' "ps only my processes"
+__addfunction psmg 'ps -u$LOGNAME | grep' "grep only my processes"
+__addfunction hl 'grep highlight'

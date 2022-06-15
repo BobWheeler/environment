@@ -1,0 +1,25 @@
+# -*- mode: Shell-script; -*-
+
+function setdev () {
+    if [ $# -gt 1 ]; then echo "usage: setdev [hostname]"; return -1; fi
+    if [ $# -eq 0 -a -f ~/.lastdev ]; then . ~/.lastdev; return 0; fi
+    if [ -z "$1" ]; then echo "setdev: must specify a hostname"; return -1; fi
+    export dev=$1
+    alias dev="ssh $dev"
+    echo "setdev $dev" > ~/.lastdev
+
+    return 0;
+}
+
+function cleardev () {
+    if [ $# -gt 0 ]; then echo "usage cleardev"; return 0; fi
+    if [ -z "$dev" ]; then echo "cleardev: no dev set"; return -1; fi
+    unset dev
+    rm ~/.lastdev
+}
+
+__addmodule dev
+__addfunction setdev "set the dev machine"
+__addfunction cleardev "clear the dev machine"
+__addfunction dev "ssh to dev machine"
+__addfunction $(echo \$dev) "environment variable with dev machine"

@@ -1,0 +1,542 @@
+# -*- mode: Shell-script; -*-
+
+# Do not load on a production machine
+[[ -n "$ONPRODMACHINE" ]] && return
+
+export DEFAULT_REPOBASE=~/repos
+
+DEBUG_PTY=/dev/pts/3
+
+function debug() {
+    while [ $# -gt 0 -a "${1:0:1}" = "-" ]; do
+	if [ "$1" = "-c" ]; then
+	    shift
+	    printf "\033c" > $DEBUG_PTY
+	elif [ "$1" = "-a" ]; then
+	    shift
+	    lsargs $* > $DEBUG_PTY
+	else
+	    usage "debug [-c] [-a] args ..." > $DEBUG_PTY
+	    return -1
+	fi
+    done
+
+    echo "debug>" $* > $DEBUG_PTY
+}
+
+function __complete_repo() {
+    local repobase dirs paths repos repopath i take repolist repo cur
+    declare -A repopath
+    repobase=${REPOBASE:-$DEFAULT_REPOBASE}
+    local IFS=$' \t\n'
+    dirs=($(find $repobase -maxdepth 2 -name .git | tr \\n ' '))
+    paths=(${dirs[@]%/.git})
+    repos=(${paths[@]##$repobase/})
+    cur=${COMP_WORDS[COMP_CWORD]}
+
+    IFS=$'\n'
+    COMPREPLY=( `compgen -W "${repos[*]}" -- $cur` )
+    return 0
+}
+
+complete -F __complete_repo cdrepo
+
+function cdrepo () {
+    local reporoot _lastsetting
+    if [ $# -eq 0 -a -f ~/.lastcdrepo ]; then
+	. ~/.lastcdrepo
+	return $?
+    fi
+
+    if [ $# -eq 0 ]; then
+	if [ -n "REPOROOT" ]; then
+	    reporoot="$REPOROOT"
+	else
+	    echo "cdrepo: no repo specified and no known last repo"
+	    return 0
+	fi
+    elif [ $# -eq 1 ]; then
+	if [ "${1:0:1}" = "/" -a -d "$1" -a -d "$1/.git" ]; then
+	    export REPOBASE=$(dirname $1)
+	    reporoot="$1"
+	else
+	    reporoot=${REPOBASE:-$DEFAULT_REPOBASE}/$1
+	fi
+    fi
+
+    if [ ! -d "$reporoot" ]; then
+	echo "cdrepo: repo \"$*\" not found" >&2
+	return 1
+    fi
+
+    export REPOROOT="$reporoot"
+    export REPONAME=${REPOROOT##*/}
+
+    rm -rf $REPOROOT/.last*~
+    export bakery=
+    export jira=
+    export ATFTEST=
+    export ATFCOMPONENT=
+    export BOOKMARKFILE="$REPOROOT/bookmarks"
+
+    echo "cdrepo $1" > ~/.lastcdrepo
+
+    for __lastsetting in $(find $REPOROOT -maxdepth 1 -name ".last*" | sort); do
+	if [ -n "$__debug_bashrc" ]; then
+	    echo "   sourcing $__lastsetting";
+	    echo -n "             ";
+	    cat $__lastsetting
+	fi
+	. $__lastsetting
+    done
+
+    cd $REPOROOT
+    return 0
+}
+
+function clearrepo () {
+    unset REPOROOT
+    export REPOBASE=${DEFAULT_REPOBASE}
+    rm ~/.lastcdrepo
+}
+
+alias build="(cdrepo; ./build.sh -DDISABLE_TESTS=ON)"
+
+function rebase () {
+    local branch yn commit_args
+    __assert_defined REPONAME REPOROOT || return 1
+    if [ $# -eq 0 ]; then
+	branch=$(__parse_git_branch)
+    elif [ $# -eq 1 ]; then
+	branch="$1"
+    else
+	echo "usage: rebase [branch]" >&2
+	return 1
+    fi
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to rebase master onto master... aborting..."
+	return 1;
+    fi
+
+    echo -n "Rebase branch $branch of $REPONAME (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting rebase..."
+	return 1;
+    fi
+
+    echo cdrepo
+    cdrepo
+    echo git checkout master
+    git checkout master
+    echo git pull --rebase --prune
+    git pull --rebase --prune
+    echo git submodule update
+    git submodule update
+    echo git checkout "$branch"
+    git checkout "$branch"
+    echo git fetch --all
+    git fetch --all
+    echo git submodule update
+    git submodule update
+    echo git rebase --interactive origin/master
+    git rebase --interactive origin/master
+}
+
+function gac () {
+    local yn commit_args
+    if [[ 'Merge' =~ $(git log -1 --oneline) ]]; then
+	echo "Last commit was a merge, do you want a new commit (Y/N)?"
+	read yn
+	if [ "$yn" != "Y" ]; then
+	    echo "Aborting addcommit..." >&2
+	    return 1
+	fi
+
+	commit_args=""
+	if  [ -n "$jira"]; then
+	    if [ ! -f ~/tmp/committemplate ]; then
+		echo "$jira: " > ~/tmp/committemplate
+	    fi
+	    commit_args="-t ~/tmp/committemplate"
+	fi
+
+	git add $*
+	git commit $commit_args $*
+    else
+	git add $*
+	git commit --amend $*
+    fi
+}
+
+function __parse_git_branch () {
+  git branch --no-color 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/'
+}
+
+function gbin () {
+    echo branch \($1\) has these commits and \($(__parse_git_branch)\) does not
+    git log ..$1 --no-merges --format='%h | Author:%an | Date:%ad | %s' --date=local
+}
+
+function gbout () {
+    echo branch \($(__parse_git_branch)\) has these commits and \($1\) does not
+    git log $1.. --no-merges --format='%h | Author:%an | Date:%ad | %s' --date=local
+}
+
+function setjira () {
+    if [ $# -gt 1 ]; then echo "usage: setjira [jira-number]"; return -1; fi
+    if [ $# -eq 0 -a -f $REPOROOT/.lastjira ]; then . $REPOROOT/.lastjira; return 0; fi
+    if [ -z "$1" ]; then echo "must specify jira"; return -1; fi
+    export jira=$1
+    alias jira="echo \$jira"
+    echo "setjira $jira" > $REPOROOT/.lastjira
+    return 0;
+}
+
+function clearjira () {
+    if [ -z "$jira" ]; then echo "usage clearjira: no jira set"; return -1; fi
+    unset jira
+    alias jira="echo 'jira: no jira number set'"
+    rm $REPOROOT/.lastjira
+}
+
+function gci () {
+    local track=""
+
+    if [ $# -eq 2 -a "$1" = "-track" ]; then
+	track="origin/$2"
+	shift
+    fi
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gci [-track] jira-tag"
+	return -1
+    fi
+
+    jira_tag="$1"
+
+    __assert_defined DEFAULT_REPOBASE || return 1
+    export REPOBASE="$DEFAULT_REPOBASE"
+    cd ${REPOBASE}
+    git clone ssh://git@stash.corp.appnexus.com:7999/realtime-platform/app_impbus.git $jira_tag
+    export REPOROOT="$REPOBASE/$jira_tag"
+    echo "setjira $jira_tag" > $REPOROOT/.lastjira
+    cdrepo $jira_tag
+
+    git submodule update --init
+    pbuilder
+    mkdir .clangd
+    git checkout -b $jira_tag $track
+    make
+    ln -s build/compile_commands.json compile_commands.json
+    ./scripts/setup_hooks.sh
+    (cd atf-tests; ./setup.sh)
+    (cd atf-tests; ./atf-run test) | tee atf-test-results.log
+}
+
+function gtc () {
+    local branch yn baketag
+    __assert_defined REPONAME REPOROOT || return 1
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gtc config-bake-tag"
+	return -1
+    fi
+    baketag="$1"
+
+    branch=$(__parse_git_branch)
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to tag master... aborting..."
+	return 1;
+    fi
+
+    echo -n "Tag branch $branch of repo $REPONAME as $baketag (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting rebase..."
+	return 1;
+    fi
+
+    git tag "$baketag"
+    git push -u origin "$baketag"
+}
+
+function gdlt () {
+    local branch yn tag
+    __assert_defined REPONAME REPOROOT || return 1
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gdlt tag"
+	return -1
+    fi
+    tag="$1"
+    branch=$(__parse_git_branch)
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to delete a local tag on master... aborting..."
+	return 1;
+    fi
+
+    echo -n "Delete tag $baketag on local branch $branch in repo $REPONAME (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting rebase..."
+	return 1;
+    fi
+
+    git branch -d "$tag"
+}
+
+function gdrt () {
+    local branch yn tag
+    __assert_defined REPONAME REPOROOT || return 1
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gdrt tag"
+	return -1
+    fi
+    tag="$1"
+    branch=$(__parse_git_branch)
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to delete a remote tag on master... aborting..."
+	return 1;
+    fi
+
+    echo -n "Delete tag $baketag on remote branch $branch in repo $REPONAME (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting rebase..."
+	return 1;
+    fi
+
+    git push -u origin "$tag"
+}
+
+function gdlb () {
+    local branch yn current_branch
+    __assert_defined REPONAME REPOROOT || return 1
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gdlb branch"
+	return -1
+    fi
+    branch="$1"
+    current_branch=$(__parse_git_branch)
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to delete a local master branch... aborting..."
+	return 1;
+    fi
+
+    echo -n "Delete local branch $branch from repo $REPONAME (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting ..."
+	return 1;
+    fi
+
+    if [ "$branch" = "$current_branch" ]; then
+	echo "changing to master branch"
+	git checkout master
+    fi
+
+    git branch -d $branch
+}
+
+function gdrb () {
+    local branch yn current_branch
+    __assert_defined REPONAME REPOROOT || return 1
+
+    if [ $# -ne 1 ]; then
+	echo "usage: gdrb branch"
+	return -1
+    fi
+    branch="$1"
+    current_branch=$(__parse_git_branch)
+
+    if [ "$branch" = "master" ]; then
+	echo "rebase: I don't think you want to delete a remote master branch... aborting..."
+	return 1;
+    fi
+
+    echo -n "Delete remote branch $branch from repo $REPONAME (Y/N)? "
+    read yn
+    if [ "$yn" != "Y" ]; then
+	echo "Aborting ..."
+	return 1;
+    fi
+
+    if [ "$branch" = "$current_branch" ]; then
+	echo "changing to master branch"
+	git checkout master
+    fi
+
+    git push origin --delete $branch
+}
+
+function gcorb () {
+    if [ $# -ne 1 ]; then
+	echo "usage: gcorb branch"
+	return -1
+    fi
+    branch="$1"
+    git checkout -t origin/$branch
+}
+
+function grla () {
+    __assert_defined DEFAULT_REPOBASE || return 1
+
+    export GIT_PAGER=cat
+
+    local diff=false
+    local commits=""
+    local files=""
+    local reverse=false
+    local DESTREPO=""
+
+    while [ $# -ne 0 ]; do
+	if [ ${1:0:1} == '-' ]; then
+	    if [ "$1" = "-help" ]; then
+		echo "usage: grla [-help | -d | -p DESTDIR] [-r] [commits] [filenames]"
+		return 0
+	    elif [ "$1" = "-d" ]; then
+		diff=true;
+	    elif [ "$1" = "-r" ]; then
+		reverse=true
+	    elif [ "$1" = "-p" ]; then
+		if [ $# -gt 1 ]; then
+		    if [ -d ${REPOBASE:-$DEFAULT_REPOBASE}/$2 ]; then
+			DESTREPO=$2
+			shift
+		    else
+			echo "  $2 is not a repository"
+			return 0
+		    fi
+		    shift
+		else
+		    echo "-patch requires a destination repository"
+		    return 0;
+		fi
+	    fi
+	elif [[ "$1" =~ ^[0-9a-f]+$ ]]; then
+	    commits+=" $1 "
+	else
+	    files+=" $1"
+	fi
+	shift;
+    done;
+
+    if [ -z "$commits" ]; then
+	commits=$(git reflog --grep-reflog=commit --format="%h")
+    fi
+
+    if $reverse; then
+	commits=$(echo "$commits" | tac)
+    fi
+
+    if [ -n "$files" ]; then
+	files="-- $files"
+    fi
+
+    if [ -n "$DESTREPO" ]; then
+	echo -n "Patching from repository $REPONAME to $DESTREPO (Y/N)? "
+	read yn
+	if [ "$yn" != "Y" ]; then
+	    echo "Aborting patch..."
+	    return 1;
+	fi
+    fi
+
+    for commit in ${commits}; do
+	if $diff; then
+	    change=$(unbuffer git show --pretty="format:" $commit $files)
+	    if [ -n "$change" ]; then
+		echo =============================================================
+		git show -s --pretty="format:--------- %Cred%h %Cgreen%ad%Creset ------------%n" $commit
+		echo -------------------------------------------------------------
+		echo "$change" | sed '1,4d'
+	    fi
+	elif [ -n "$DESTREPO" ]; then
+	    change=$(unbuffer git show --pretty="format:" $commit $files)
+	    if [ -n "$change" ]; then
+		echo "git diff master $commit $files | (cd ${REPOBASE:-$DEFAULT_REPOBASE}/$DESTREPO; git apply -)"
+		git diff master $commit $files | (cd ${REPOBASE:-$DEFAULT_REPOBASE}/$DESTREPO; git apply -)
+	    fi
+	else
+	    change=$(git show --oneline --stat $commit $files | sed '1d')
+	    if [ -n "$change" ]; then
+		git show -s --pretty="format:-------- %Cred%h %Cgreen%ad%Creset ------------%n" $commit
+		echo "$change"
+		echo
+	    fi
+	fi
+    done
+}
+
+alias gco="git checkout"
+alias gs="git status"
+alias gsf="git status --porcelain | grep -v '^??' | sed -re 's/^.* //g'"
+alias gb="git branch"
+alias ga="git add"
+alias gl="git log"
+alias grl="git reflog"
+alias gd="git diff"
+alias glg="git log --oneline --graph"
+alias grl='git reflog'
+alias gmns='git status --porcelain | sed -n -e '\''s/^[M ]M \(.*\)/\1/g;Tx;p;:x'\'''
+alias gms='git status --porcelain | sed -n -e '\''s/^M  \(.*\)/\1/g;Tx;p;:x'\'''
+alias gna='git status --porcelain | sed -n -e '\''s/^?? \(.*\)/\1/g;Tx;p;:x'\'''
+alias gmd='git status --porcelain | sed -n -e '\''s/^ D \(.*\)/\1/g;Tx;p;:x'\'''
+alias gssf='git stash show | sed -n -re '\''s/ ([^ ]+).*\|.*/\1/g;Tx;p;:x'\'''
+alias gdlr="echo local:; git log --oneline -2; echo remote:; git log --oneline -1 origin"
+alias gctl="git tag | tr . ' ' | sort -k1n -k2n -k3n | tr ' ' . | tail -10"
+alias gitl='git tag | grep -e "^4\." | tr . '\'' '\'' | sort -k1n -k2n -k3n | tr '\'' '\'' . | tail -10'
+alias gsm='git submodule'
+alias gsmu="git submodule update"
+
+__addmodule git
+__addfunction cdrepo "cd to repository"
+__addfunction grla "git reflog analyzer and patch utility"
+__addfunction clearrepo "clear the repository"
+__addfunction rebase "rebase the repository"
+__addfunction gac "git add & commit files"
+__addfunction gs "git status"
+__addfunction gsf "git status filenames"
+__addfunction gb "git branch"
+__addfunction ga "git add"
+__addfunction gl "git log"
+__addfunction grl "git reflog"
+__addfunction gd "git diff"
+__addfunction glg "git log with graph"
+__addfunction gco "git checkout"
+__addfunction grl "git reflog"
+__addfunction gbin "get commits on branch and not in master"
+__addfunction gbout "get commits on master and not in branch"
+__addfunction gci "clone impbus"
+__addfunction gmns "git files that are modified and but not staged"
+__addfunction gms "git files that are modified and staged"
+__addfunction gna "git files that are not added"
+__addfunction gan "git files that are added but not configured"
+__addfunction gdlr "git diff heads of local and remote branches"
+__addfunction gctl "git config tag list"
+__addfunction gitl "git impbus tag list"
+__addfunction gtc "git tag a configuration repo"
+__addfunction gdlt "git delete local tag"
+__addfunction gdrt "git delete remote tag"
+__addfunction gdlb "git delete local branch"
+__addfunction gdrb "git delete remote branch"
+__addfunction gcorb "git checkout remote branch"
+__addfunction gmd "git modified and deleted"
+__addfunction gssf "git stash show files"
+__addfunction gsmc "git submodule commits"
+__addfunction gsm "git submodule"
+__addfunction gsmu "git submodule update"
+
+__addmodule jira
+__addfunction setjira "set the jira number"
+__addfunction clearjira "clear the jira number"
+__addfunction jira "print jira number"
+__addfunction $(echo \$jira) "environment variable with jira machine"

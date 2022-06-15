@@ -1,0 +1,52 @@
+# -*- mode: Shell-script; -*-
+
+# Do not load on a production machine
+[[ -n "$ONPRODMACHINE" ]] && return
+
+function findsrc () {
+    if [ $# -lt 1 ]; then echo "usage: findsrc [grep command line]"; return 0; fi
+    find -L . -name '*.[ch]' -exec grep --color=auto -H -n $* {} \; 2> /dev/null
+}
+
+function findre () {
+    if [ $# -lt 1 ]; then echo "usage: findre [grep -E command line]"; return 0; fi
+    find -L . -name '*.[ch]' -exec grep --color=auto -E -H -n $* {} \; 2> /dev/null
+}
+
+function findjs () {
+    if [ $# -lt 1 ]; then echo "usage: findjs string"; return 0; fi
+    find -L . -name '*.js' -exec grep --color=auto -H -n $* {} \; 2> /dev/null
+}
+
+function findtxt () {
+    if [ $# -lt 1 ]; then echo "usage: findtxt string"; return 0; fi
+    find -L . -name '*.txt' -exec grep --color=auto -H -n $* {} \; 2> /dev/null
+}
+
+function findproto () {
+    if [ $# -lt 1 ]; then echo "usage: findtxt string"; return 0; fi
+    find -L . -name '*.proto' -exec grep --color=auto -H -n $* {} \; 2> /dev/null
+}
+
+function findq () {
+    if [ $# -lt 1 ]; then echo "usage: findq string"; return 0; fi
+    find -L . -name '*.q' -exec grep --color=auto -H -n $* {} \; 2> /dev/null
+}
+
+function lsrl() {
+    export P="$1"
+    echo $P
+    while [ -L $P ]; do
+	export P=$(/bin/ls -l $P | sed 's/.*-> //g')
+	echo "-> $P"
+    done
+}
+
+__addmodule findsrc
+__addfunction findsrc "find .c or .h files and grep for specified string"
+__addfunction findre  "find .c or .h files and egrep for specified string"
+__addfunction findjs  "find .js files and grep for specified string"
+__addfunction findtxt "find .txt files and grep for specified string"
+__addfunction findq "find .q files and grep for specified string"
+__addfunction findproto "find .proto files and grep for specified string"
+__addfunction lsrl "ls recursive symbolic links"

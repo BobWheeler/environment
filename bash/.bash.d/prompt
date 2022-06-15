@@ -1,0 +1,20 @@
+# -*- mode: Shell-script; -*-
+
+# if [[ -n "$ONPRODMACHINE" ]]; then
+#     __h="prod"
+# else
+#     __h="dev"
+# fi
+
+if [ $(/usr/bin/whoami) = "root" ]; then
+  PS1="\h \w > "
+else
+  PS1="\h \w $ "
+fi
+
+# unset __h
+
+function title () { echo -en "\033]0;$*\a"; }
+
+__addmodule prompt
+__addfunction title "set terminal screen title"

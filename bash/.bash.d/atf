@@ -1,0 +1,161 @@
+# -*- mode: Shell-script; -*-
+
+# Do not load on a production machine
+[[ -n "$ONPRODMACHINE" ]] && return
+
+# export ERROR=/dev/pts/2
+# printf "\033c" >> $ERROR
+
+# function __comp_setatf () {
+#     echo "compopt : $(compopt)" >> $ERROR
+#     echo >> $ERROR
+#     echo "COMP_WORDS : ${COMP_WORDS}">> $ERROR
+#     echo "COMP_CWORD : ${COMP_CWORD}">> $ERROR
+#     echo "COMP_WORDS[COMP_CWORD] : ${COMP_WORDS[COMP_CWORD]}">> $ERROR
+#     echo "COMP_LINE : ${COMP_LINE}">> $ERROR
+#     echo "COMP_POINT : ${COMP_POINT}">> $ERROR
+#     echo "COMP_KEY : ${COMP_KEY}">> $ERROR
+#     echo "COMP_TYPE : ${COMP_TYPE}">> $ERROR
+#     echo "args : $1, $2, $3">> $ERROR
+
+#     __assert_defined REPOROOT || return 1  
+    
+#     COMPREPLY=()
+#     local cur=${COMP_WORDS[COMP_CWORD]}
+
+#     if [ $3 = $1 -a $COMP_CWORD -eq 1 ]; then
+# 	set mark-directories 0
+# 	COMPREPLY=( $(compgen -W "impbus picasso" -- $cur) )
+# 	return 0
+#     elif [ $COMP_CWORD -eq 2 ]; then
+# 	local dir cur olddir path
+# 	olddir=$PWD
+# 	path="$REPOROOT/atf-tests/test/$3"
+
+# 	echo "path : $path" >> $ERROR
+
+# 	cd $path
+
+# 	COMPREPLY=()
+# 	set mark-directories 1
+# 	COMPREPLY=( $(compgen -o nospace -f ) )
+# 	echo "COMPREPLY : $COMPREPLY" >> $ERROR
+# 	cd $olddir
+# 	return 124
+#     fi
+
+# }
+
+# complete -D -o filenames -o nospace -o bashdefault -F __comp_setatf setatf
+
+function setatf () {
+    __assert_defined REPOROOT || return 1
+
+    if [ $# -gt 2 ]; then
+	echo "usage: setatf [component testfile]" >&2
+	return
+    fi
+
+    if [ $# -eq 0 -a -f ~/.lastatf ]; then
+	. ~/.lastatf || return 1
+    fi
+
+    export ATFCOMPONENT="$1"
+    export ATFTEST="$2"
+
+    if [ ! -f "$REPOROOT/atf-tests/test/$ATFCOMPONENT/$ATFTEST" ]; then
+	echo "setatf: atf test $ATFCOMPONENT/$ATFTEST not found in repo $REPONAME"
+	return 1
+    fi
+
+    echo "setatf $ATFCOMPONENT $ATFTEST" > $REPOROOT/.lastatf
+    return 0
+}
+
+function showatf () {
+    __assert_defined REPONAME ATFCOMPONENT ATFTEST || return 1
+    printf "repo: %s, component: %s, test: %s\n" $REPONAME $ATFCOMPONENT $ATFTEST
+    return 0
+}
+
+function runatf () {
+    __assert_defined REPOROOT || return 1
+    local debug prefix command suffix test
+
+    if [ $# -gt 3 ]; then 
+	echo "usage: atf [[-debug] [-gdb] test]" >&2
+	return 1;
+    fi
+
+    debug=""
+    prefix=""
+    command="$REPOROOT/atf-tests/atf"
+    suffix=" run"
+
+    while [ $# -gt 0 ]; do
+	if [ $1 = "-gdb" ]; then
+	    __assert_defined ATFCOMPONENT || return 1
+	    prefix="LOOP=$ATFCOMPONENT"
+	    suffix="-run"
+	    shift
+	elif [ $1 = "-debug" ]; then
+	    __assert_defined  ATFCOMPONENT || return 1
+	    debug="DEBUG='*/test/$ATFCOMPONENT/*'"
+	    shift
+	else
+	    break
+	fi
+    done
+
+    if [ $# -eq 1 ]; then
+	test="$1"
+    else
+	__assert_defined ATFCOMPONENT ATFTEST || return 1
+	test="$REPOROOT/atf-tests/test/$ATFCOMPONENT/$ATFTEST"
+    fi
+
+    echo killall -9 impbus node
+    killall -9 impbus node
+    echo $debug $prefix $command$suffix $test
+    eval $debug $prefix $command$suffix $test
+    return #?
+}
+
+function clean-atf () {
+    __assert_defined REPOROOT || return 1
+    if [ ! -d $REPOROOT/atf-tests ]; then
+	echo "clean-atf: director $REPOROOT/atf-tests does not exist"
+	return 1;
+    fi
+    (
+	cd $REPOROOT/atf-tests
+	rm -rf node_modules/ atf-* atf
+	./setup.sh
+    )
+    return 0
+}
+
+function gdb-sources () {
+    __assert_defined REPOROOT || return 1
+
+    if [ ! -f $REPOROOT/build/compile_commands.json ]; then
+	echo "Run 'cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1' to generate the file build/compile_commands.json in the repository"
+	return 1
+    fi
+
+    echo "building list of sources... pipe into a file and at the gdb prompt enter 'source filename'" >&2
+    echo -e "set debug_loop = 0\n"
+    sources=$(for file in $(grep '"file":' $REPOROOT/build/compile_commands.json | sed -re 's/"file": "([^"]+)"/\1/g')
+	      do echo ${file%/*};  done | sort | uniq | tr '\n' ':')
+    echo "directory ${sources%:}"
+    echo -e "set print pretty\n"
+}
+
+alias im="while true; do clear; psm | grep impbus; sleep 1; done"
+
+__addmodule atf
+__addfunction setatf "set the current atf test"
+__addfunction runatf "run atf test"
+__addfunction clean-atf "clean and reload atf node_modules"
+__addfunction gdb-sources  "generate source for gdb"
+__addfunction im "impus monitor"

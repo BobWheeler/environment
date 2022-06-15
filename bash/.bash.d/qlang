@@ -1,0 +1,6 @@
+# -*- mode: Shell-script; -*-
+
+# Do not load on a production machine
+[[ -n "$ONPRODMACHINE" ]] && return
+
+alias q='QHOME=~/q-old/l32/q rlwrap -r ~/q-old/l32/q'

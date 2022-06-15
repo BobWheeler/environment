@@ -1,0 +1,10 @@
+#!/bin/bash
+
+cd ~
+for file in .emacs .emacs-prod .emacs.d; do
+    ln -s ~/repos/environment/emacs/$file $file
+done
+
+for file in .bashrc .bash.d .profile; do
+    ln -s ~/repos/environment/bash/$file $file
+done

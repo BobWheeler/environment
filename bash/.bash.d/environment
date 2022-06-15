@@ -1,0 +1,8 @@
+# -*- mode: Shell-script; -*-
+
+TZ='America/New_York'
+IGNOREEOF=1000
+export MANPAGER=less
+
+__addmodule environment
+

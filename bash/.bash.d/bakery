@@ -1,0 +1,32 @@
+# -*- mode: Shell-script; -*-
+
+# Do not load on a production machine
+[[ -n "$ONPRODMACHINE" ]] && return
+
+function setbakery () {
+    if [ $# -gt 1 ]; then echo "usage: setbakery [hostname]"; return -1; fi
+    if [ $# -eq 0 -a -f $REPOROOT/.lastbakery ]; then . $REPOROOT/.lastbakery; return 0; fi
+    if [ -z "$1" ]; then echo "setbakery: must specify a hostname"; return -1; fi
+    export bakery=$1
+    alias bakery="ssh $USER@$bakery"
+    alias bakestatus="bakery curl 0:8000/status"
+    echo "setbakery $bakery" > $REPOROOT/.lastbakery
+
+    return 0;
+}
+
+function clearbakery () {
+    if [ $# -gt 0 ]; then echo "usage clearbakery"; return 0; fi
+    if [ -z "$bakery" ]; then echo "clearbakery: no bakery set"; return -1; fi
+    unset bakery
+    alias bakery="echo 'bakery: no bakery set'"
+    alias bakestatus="echo 'bakestatus: no bakery set'"
+    rm $REPOROOT/.lastbakery
+}
+
+__addmodule bakery
+__addfunction setbakery "set the bake machine"
+__addfunction clearbakery "clear the bake machine"
+__addfunction bakery "ssh to bake machine"
+__addfunction bakestatus "get status of bake machine"
+__addfunction $(echo \$bakery) "environment variable with bake machine"
